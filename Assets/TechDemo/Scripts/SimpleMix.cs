@@ -23,6 +23,9 @@ namespace TechDemo {
         private PlayableGraph playableGraph;
         private AnimationScriptPlayable customPlayable;
 
+        private AnimationClipPlayable clipPlayable1;
+        private AnimationClipPlayable clipPlayable2;
+
         private void OnEnable() {
             Assert.IsNotNull(this.clip1);
             Assert.IsNotNull(this.clip2);
@@ -55,8 +58,12 @@ namespace TechDemo {
             
             this.customPlayable = AnimationScriptPlayable.Create(this.playableGraph, mixerJob);
             this.customPlayable.SetProcessInputs(false);
-            this.customPlayable.AddInput(AnimationClipPlayable.Create(this.playableGraph, this.clip1), 0, 1.0f);
-            this.customPlayable.AddInput(AnimationClipPlayable.Create(this.playableGraph, this.clip2), 0, 1.0f);
+            
+            this.clipPlayable1 = AnimationClipPlayable.Create(this.playableGraph, this.clip1);
+            this.clipPlayable2 = AnimationClipPlayable.Create(this.playableGraph, this.clip2);
+            
+            this.customPlayable.AddInput(this.clipPlayable1, 0, 1.0f);
+            this.customPlayable.AddInput(this.clipPlayable2, 0, 1.0f);
             
             AnimationPlayableOutput output = AnimationPlayableOutput.Create(this.playableGraph, "output", animator);
             output.SetSourcePlayable(this.customPlayable);
@@ -65,14 +72,32 @@ namespace TechDemo {
         }
 
         private void OnDisable() {
+            this.transformHandles.Dispose();
+            this.boneWeights.Dispose();
             this.playableGraph.Destroy();
         }
 
+        private float prevWeight;
+
         private void Update() {
+            if (Mathf.Approximately(this.prevWeight, this.weight)) {
+                return; // No change of weight
+            }
+            
             // Set the weight as it could be changed in the editor.
             MixerJob mixerJob = this.customPlayable.GetJobData<MixerJob>();
             mixerJob.weight = this.weight;
             this.customPlayable.SetJobData(mixerJob);
+            
+            // Play both clips at speeds that make their cycles last the same blended length,
+            // so they stay at the same normalized time and don't drift apart.
+            float length1 = this.clip1.length;
+            float length2 = this.clip2.length;
+            float blendedLength = Mathf.Lerp(length1, length2, this.weight);
+            this.clipPlayable1.SetSpeed(length1 / blendedLength);
+            this.clipPlayable2.SetSpeed(length2 / blendedLength);
+
+            this.prevWeight = this.weight;
         }
 
         [BurstCompile]

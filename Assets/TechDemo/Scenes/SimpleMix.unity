@@ -138,6 +138,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TechDemo.SimpleMix
   clip1: {fileID: 7400000, guid: b2066856d27d87c419efbe42e1592117, type: 3}
   clip2: {fileID: 7400000, guid: 862dfc1fe4b9bae478dc65ca071342dc, type: 3}
+  weight: 0
 --- !u!1 &614597312
 GameObject:
   m_ObjectHideFlags: 0
