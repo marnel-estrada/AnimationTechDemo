@@ -18,9 +18,6 @@ namespace TechDemo {
         [SerializeField]
         private float rayStartHeight = 0.5f;
 
-        [SerializeField]
-        private float rayLength = 1.5f;
-
         private PlayableGraph playableGraph;
         private AnimationScriptPlayable ikPlayable;
 
@@ -28,6 +25,7 @@ namespace TechDemo {
         private Vector3 rayOrigin;
         private bool hasHit;
         private RaycastHit lastHit;
+        private float rayLength;
 
         private void OnEnable() {
             Assert.IsNotNull(this.footJoint);
@@ -73,6 +71,9 @@ namespace TechDemo {
 
             FootIkJob ikJob = this.ikPlayable.GetJobData<FootIkJob>();
             ikJob.rootHeight = rootHeight;
+            
+            // Limit the rayLength only until the characters root position
+            this.rayLength = origin.y - rootHeight;
 
             this.hasHit = Physics.Raycast(origin, Vector3.down, out this.lastHit, this.rayLength, this.groundMask);
             if (this.hasHit) {
@@ -131,10 +132,7 @@ namespace TechDemo {
                 // Keep the clip's ankle height, but measure it from the hit ground instead of the root
                 float ankleHeight = footPosition.y - this.rootHeight;
                 Vector3 target = new(footPosition.x, this.groundHeight + ankleHeight, footPosition.z);
-                Debug.Log($"groundHeight {this.groundHeight} footY {footPosition.y} targetY {target.y}");
                 TwoBoneIkSolver.Solve(stream, this.top, this.mid, this.low, target);
-                
-                Debug.Log($"solvedFootY {this.low.GetPosition(stream).y}");
                 
                 // The solver rotated the parents, so put back the animation world rotation, then tilt it to the ground
                 Quaternion tilt = Quaternion.FromToRotation(Vector3.up, this.groundNormal);

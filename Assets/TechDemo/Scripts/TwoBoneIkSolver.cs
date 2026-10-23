@@ -27,7 +27,6 @@ namespace TechDemo {
 
             float abcAngle = TriangleAngle(ac.magnitude, ab, bc);
             float abeAngle = TriangleAngle(ae.magnitude, ab, bc);
-            Debug.Log($"abcAngle {abcAngle} abeAngle {abeAngle}");
             float angle = (abcAngle - abeAngle) * Mathf.Rad2Deg;
             Vector3 axis = Vector3.Cross(ab, bc).normalized;
 
