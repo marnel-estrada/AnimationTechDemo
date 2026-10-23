@@ -1,4 +1,5 @@
-﻿using Unity.Burst;
+﻿using System;
+using Unity.Burst;
 using UnityEngine;
 using UnityEngine.Animations;
 using UnityEngine.Assertions;
@@ -53,6 +54,10 @@ namespace TechDemo {
             
             output.SetSourcePlayable(this.lookAtPlayable);
             this.playableGraph.Play();
+        }
+
+        private void OnDisable() {
+            this.playableGraph.Destroy();
         }
 
         private static Vector3 GetAxisVector(Axis axis)
