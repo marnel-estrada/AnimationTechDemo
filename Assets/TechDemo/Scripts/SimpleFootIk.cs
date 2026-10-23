@@ -1,13 +1,16 @@
-﻿using NUnit.Framework;
-using Unity.Burst;
+﻿using Unity.Burst;
 using UnityEngine;
 using UnityEngine.Animations;
+using UnityEngine.Assertions;
 using UnityEngine.Playables;
 
 namespace TechDemo {
     public class SimpleFootIk : MonoBehaviour {
         [SerializeField]
-        private Transform footJoint;
+        private Transform leftFoot;
+        
+        [SerializeField]
+        private Transform rightFoot;
 
         [SerializeField]
         private AnimationClip animationClip;
@@ -22,32 +25,22 @@ namespace TechDemo {
         private AnimationScriptPlayable ikPlayable;
 
         // Last raycast, for gizmos
-        private Vector3 rayOrigin;
-        private bool hasHit;
-        private RaycastHit lastHit;
-        private float rayLength;
+        private FootRay leftRay;
+        private FootRay rightRay;
 
         private void OnEnable() {
-            Assert.IsNotNull(this.footJoint);
+            Assert.IsNotNull(this.leftFoot);
+            Assert.IsNotNull(this.rightFoot);
             Assert.IsNotNull(this.animationClip);
 
             this.playableGraph = PlayableGraph.Create("FootIk");
             this.playableGraph.SetTimeUpdateMode(DirectorUpdateMode.GameTime);
 
             Animator animator = GetComponent<Animator>();
-            AnimationPlayableOutput output = AnimationPlayableOutput.Create(this.playableGraph, "output", animator);
-            
-            Transform knee = this.footJoint.parent;
-            Assert.IsNotNull(knee);
-            
-            Transform hip = knee.parent;
-            Assert.IsNotNull(hip);
 
             FootIkJob ikJob = new() {
-                top = animator.BindStreamTransform(hip),
-                mid = animator.BindStreamTransform(knee),
-                low = animator.BindStreamTransform(this.footJoint),
-                groundNormal = Vector3.up
+                left = CreateLeg(animator, this.leftFoot),
+                right = CreateLeg(animator, this.rightFoot)
             };
             
             // We call SetApplyFootIK(false) so that our custom IK works on the foot
@@ -57,34 +50,67 @@ namespace TechDemo {
             this.ikPlayable = AnimationScriptPlayable.Create(this.playableGraph, ikJob);
             this.ikPlayable.AddInput(animationClipPlayable, 0, 1f);
             
+            AnimationPlayableOutput output = AnimationPlayableOutput.Create(this.playableGraph, "output", animator);
             output.SetSourcePlayable(this.ikPlayable);
             this.playableGraph.Play();
+        }
+
+        private static Leg CreateLeg(Animator animator, Transform foot) {
+            Transform knee = foot.parent;
+            Assert.IsNotNull(knee);
+            
+            Transform hip = knee.parent;
+            Assert.IsNotNull(hip);
+
+            return new Leg() {
+                top = animator.BindStreamTransform(hip),
+                mid = animator.BindStreamTransform(knee),
+                low = animator.BindStreamTransform(foot),
+                groundNormal = Vector3.up
+            };
+        }
+
+        private void OnDisable() {
+            this.playableGraph.Destroy();
         }
 
         private void Update() {
             // Do the raycast here since Physics can't run in the animation job.
             // This uses the last frame's foot position, though
             float rootHeight = this.transform.position.y;
-            Vector3 origin = this.footJoint.position;
-            origin.y = rootHeight + this.rayStartHeight;
-            this.rayOrigin = origin;
+
+            this.leftRay = CastFootRay(this.leftFoot, rootHeight);
+            this.rightRay = CastFootRay(this.rightFoot, rootHeight);
 
             FootIkJob ikJob = this.ikPlayable.GetJobData<FootIkJob>();
             ikJob.rootHeight = rootHeight;
-            
-            // Limit the rayLength only until the characters root position
-            this.rayLength = origin.y - rootHeight;
-
-            this.hasHit = Physics.Raycast(origin, Vector3.down, out this.lastHit, this.rayLength, this.groundMask);
-            if (this.hasHit) {
-                ikJob.groundHeight = this.lastHit.point.y;
-                ikJob.groundNormal = this.lastHit.normal;
-                ikJob.weight = 1.0f;
-            } else {
-                ikJob.weight = 0;
-            }
-
+            ApplyRay(ref ikJob.left, ref this.leftRay);
+            ApplyRay(ref ikJob.right, ref this.rightRay);
             this.ikPlayable.SetJobData(ikJob);
+        }
+
+        private FootRay CastFootRay(Transform foot, float rootHeight) {
+            Vector3 origin = foot.position;
+            origin.y = rootHeight + this.rayStartHeight;
+
+            FootRay ray = new() {
+                origin = origin
+            };
+
+            ray.rayLength = origin.y - rootHeight;
+            ray.hasHit = Physics.Raycast(origin, Vector3.down, out ray.hit, ray.rayLength, this.groundMask);
+
+            return ray;
+        }
+
+        private static void ApplyRay(ref Leg leg, ref FootRay ray) {
+            if (ray.hasHit) {
+                leg.groundHeight = ray.hit.point.y;
+                leg.groundNormal = ray.hit.normal;
+                leg.weight = 1.0f;
+            } else {
+                leg.weight = 0;
+            }
         }
 
         private void OnDrawGizmos() {
@@ -92,51 +118,74 @@ namespace TechDemo {
                 return;
             }
 
-            if (this.hasHit) {
+            DrawFootRay(ref this.leftRay);
+            DrawFootRay(ref this.rightRay);
+        }
+
+        private static void DrawFootRay(ref FootRay ray) {
+            if (ray.hasHit) {
                 // Green up to the hit, then the hit point and its normal
                 Gizmos.color = Color.green;
-                Gizmos.DrawLine(this.rayOrigin, this.lastHit.point);
-                Gizmos.DrawWireSphere(this.lastHit.point, 0.03f);
+                Gizmos.DrawLine(ray.origin, ray.hit.point);
+                Gizmos.DrawWireSphere(ray.hit.point, 0.03f);
 
-                Gizmos.color = Color.cyan;
-                Gizmos.DrawLine(this.lastHit.point, this.lastHit.point + this.lastHit.normal * 0.3f);
+                Gizmos.color = Color.blue;
+                Gizmos.DrawLine(ray.hit.point, ray.hit.point + ray.hit.normal * 0.3f);
             } else {
                 // Red full length on a miss
                 Gizmos.color = Color.red;
-                Gizmos.DrawLine(this.rayOrigin, this.rayOrigin + Vector3.down * this.rayLength);
+                Gizmos.DrawLine(ray.origin, ray.origin + Vector3.down * ray.rayLength);
             }
         }
-        
-        [BurstCompile]
-        private struct FootIkJob : IAnimationJob {
+
+        private struct FootRay {
+            internal RaycastHit hit;
+            internal Vector3 origin;
+            internal float rayLength;
+            internal bool hasHit;
+        }
+
+        private struct Leg {
             public TransformStreamHandle top;
             public TransformStreamHandle mid;
             public TransformStreamHandle low;
 
-            public float rootHeight;
-            public float groundHeight;
             public Vector3 groundNormal;
+            public float groundHeight;
             public float weight;
+        }
+        
+        [BurstCompile]
+        private struct FootIkJob : IAnimationJob {
+            public Leg left;
+            public Leg right;
+
+            public float rootHeight;
             
             public void ProcessRootMotion(AnimationStream stream) {
             }
             
             public void ProcessAnimation(AnimationStream stream) {
-                if (this.weight <= 0f) {
+                Solve(stream, ref this.left);
+                Solve(stream, ref this.right);
+            }
+
+            private void Solve(AnimationStream stream, ref Leg leg) {
+                if (leg.weight <= 0f) {
                     return;
                 }
 
-                Vector3 footPosition = this.low.GetPosition(stream);
-                Quaternion footRotation = this.low.GetRotation(stream);
+                Vector3 footPosition = leg.low.GetPosition(stream);
+                Quaternion footRotation = leg.low.GetRotation(stream);
                 
                 // Keep the clip's ankle height, but measure it from the hit ground instead of the root
                 float ankleHeight = footPosition.y - this.rootHeight;
-                Vector3 target = new(footPosition.x, this.groundHeight + ankleHeight, footPosition.z);
-                TwoBoneIkSolver.Solve(stream, this.top, this.mid, this.low, target);
+                Vector3 target = new(footPosition.x, leg.groundHeight + ankleHeight, footPosition.z);
+                TwoBoneIkSolver.Solve(stream, leg.top, leg.mid, leg.low, target);
                 
                 // The solver rotated the parents, so put back the animation world rotation, then tilt it to the ground
-                Quaternion tilt = Quaternion.FromToRotation(Vector3.up, this.groundNormal);
-                this.low.SetRotation(stream, Quaternion.Slerp(footRotation, tilt * footRotation, this.weight));
+                Quaternion tilt = Quaternion.FromToRotation(Vector3.up, leg.groundNormal);
+                leg.low.SetRotation(stream, Quaternion.Slerp(footRotation, tilt * footRotation, leg.weight));
             }
         }
     }

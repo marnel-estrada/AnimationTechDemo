@@ -248,13 +248,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 74f9c799883d4cd7b278b16999711a5e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TechDemo.SimpleFootIk
-  footJoint: {fileID: 1856723931}
+  leftFoot: {fileID: 1856723931}
+  rightFoot: {fileID: 1815629746}
   animationClip: {fileID: 7400000, guid: 2e2b7350e68ead84ebb8efca8fd1643a, type: 3}
   groundMask:
     serializedVersion: 2
     m_Bits: 64
   rayStartHeight: 2
-  rayLength: 4
 --- !u!1 &614597312
 GameObject:
   m_ObjectHideFlags: 0
@@ -528,6 +528,11 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!4 &1815629746 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400088, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
+  m_PrefabInstance: {fileID: 1856723930}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &1856723930
 PrefabInstance:
   m_ObjectHideFlags: 0
