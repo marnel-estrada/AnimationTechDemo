@@ -94,10 +94,10 @@ namespace TechDemo {
             origin.y = rootHeight + this.rayStartHeight;
 
             FootRay ray = new() {
-                origin = origin
+                origin = origin,
+                rayLength = origin.y - rootHeight
             };
 
-            ray.rayLength = origin.y - rootHeight;
             ray.hasHit = Physics.Raycast(origin, Vector3.down, out ray.hit, ray.rayLength, this.groundMask);
 
             return ray;
