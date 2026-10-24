@@ -75,7 +75,7 @@ namespace TechDemo {
                 top = animator.BindStreamTransform(hip),
                 mid = animator.BindStreamTransform(knee),
                 low = animator.BindStreamTransform(foot),
-                groundNormal = Vector3.up
+                groundHitNormal = Vector3.up
             };
         }
 
@@ -114,8 +114,8 @@ namespace TechDemo {
 
         private static void ApplyRay(ref Leg leg, ref FootRay ray) {
             if (ray.hasHit) {
-                leg.groundHeight = ray.hit.point.y;
-                leg.groundNormal = ray.hit.normal;
+                leg.groundHitY = ray.hit.point.y;
+                leg.groundHitNormal = ray.hit.normal;
                 leg.weight = 1.0f;
             } else {
                 leg.weight = 0;
@@ -159,8 +159,8 @@ namespace TechDemo {
             public TransformStreamHandle mid;
             public TransformStreamHandle low;
 
-            public Vector3 groundNormal;
-            public float groundHeight;
+            public Vector3 groundHitNormal;
+            public float groundHitY;
             public float weight;
         }
         
@@ -183,36 +183,39 @@ namespace TechDemo {
                 Vector3 rightFootPosition = this.right.low.GetPosition(stream);
                 Quaternion rightFootRotation = this.right.low.GetRotation(stream);
 
-                float leftOffset = GroundOffset(ref this.left);
-                float rightOffset = GroundOffset(ref this.right);
+                float leftOffset = GroundOffset(ref this.left, leftFootPosition);
+                float rightOffset = GroundOffset(ref this.right, rightFootPosition);
                 
                 // Lower the pelvis by the deepest drop so that foot can reach. Raised feet just bend the knee
                 float pelvisOffset = Mathf.Min(0f, Mathf.Min(leftOffset, rightOffset));
                 Vector3 pelvisPosition = this.pelvis.GetPosition(stream);
-                this.pelvis.SetPosition(stream, pelvisPosition + Vector3.up * pelvisOffset);
+                this.pelvis.SetPosition(stream, pelvisPosition + new Vector3(0, pelvisOffset, 0));
                 
                 Solve(stream, ref this.left, leftFootPosition, leftFootRotation, leftOffset);
                 Solve(stream, ref this.right, rightFootPosition, rightFootRotation, rightOffset);
             }
             
-            // How far the ground under this foot is from the root. Zero on a miss so the foot keeps its animated height
-            private float GroundOffset(ref Leg leg) {
-                return leg.weight > 0f ? leg.groundHeight - this.rootHeight : 0f;
+            // How far the ankle has to move up (or down) to keep its clip height above the ground under it,
+            // measured along the ground normal so the sole doesn't sink on slopes. Zero on a miss so the foot
+            // keeps its animated height
+            private float GroundOffset(ref Leg leg, Vector3 footPosition) {
+                if (leg.weight <= 0f) {
+                    return 0f;
+                }
+
+                float ankleHeight = footPosition.y - this.rootHeight;
+                return leg.groundHitY + ankleHeight / leg.groundHitNormal.y - footPosition.y;
             }
 
-            private void Solve(AnimationStream stream, ref Leg leg, Vector3 footPosition, Quaternion footRotation, 
+            private static void Solve(AnimationStream stream, ref Leg leg, Vector3 footPosition, Quaternion footRotation, 
                 float groundOffset) {
                 // Keep the clip's ankle height, but measured from the ground under the foot instead of the root.
                 // Always solve, even on a miss, since the pelvis may have moved the foot
-                Vector3 target = footPosition + Vector3.up * groundOffset;
-                
-                // Keep the clip's ankle height, but measure it from the hit ground instead of the root
-                // float ankleHeight = footPosition.y - this.rootHeight;
-                // Vector3 target = new(footPosition.x, leg.groundHeight + ankleHeight, footPosition.z);
+                Vector3 target = footPosition + new Vector3(0, groundOffset, 0);
                 TwoBoneIkSolver.Solve(stream, leg.top, leg.mid, leg.low, target);
                 
                 // The solver rotated the parents, so put back the animation world rotation, then tilt it to the ground
-                Quaternion tilt = Quaternion.FromToRotation(Vector3.up, leg.groundNormal);
+                Quaternion tilt = Quaternion.FromToRotation(Vector3.up, leg.groundHitNormal);
                 leg.low.SetRotation(stream, Quaternion.Slerp(footRotation, tilt * footRotation, leg.weight));
             }
         }
