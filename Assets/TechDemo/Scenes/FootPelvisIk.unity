@@ -393,7 +393,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TechDemo.FootPelvisIk
   leftFoot: {fileID: 1856723931}
+  leftToe: {fileID: 1539598300}
   rightFoot: {fileID: 1815629746}
+  rightToe: {fileID: 994499544}
   pelvis: {fileID: 1856723932}
   animationClip: {fileID: 7400000, guid: 2e2b7350e68ead84ebb8efca8fd1643a, type: 3}
   groundMask:
@@ -495,7 +497,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TechDemo.FootPelvisIk
   leftFoot: {fileID: 145761607}
+  leftToe: {fileID: 1132134150}
   rightFoot: {fileID: 145761606}
+  rightToe: {fileID: 1439025873}
   pelvis: {fileID: 145761605}
   animationClip: {fileID: 7400000, guid: bc8d6f745767cad499bb135ea5afebbb, type: 3}
   groundMask:
@@ -609,13 +613,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 420666085}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0.42261827, w: 0.9063079}
-  m_LocalPosition: {x: 2.797, y: -0.305, z: 0.23}
+  m_LocalRotation: {x: 0, y: 0, z: 0.38268343, w: 0.92387956}
+  m_LocalPosition: {x: 2.797, y: -0.305, z: 0}
   m_LocalScale: {x: 3.04, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 50}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 45}
 --- !u!1 &614597312
 GameObject:
   m_ObjectHideFlags: 0
@@ -743,6 +747,16 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!4 &994499544 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400138, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
+  m_PrefabInstance: {fileID: 1856723930}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &1132134150 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400076, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
+  m_PrefabInstance: {fileID: 145761603}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1430429541
 GameObject:
   m_ObjectHideFlags: 0
@@ -889,6 +903,16 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!4 &1439025873 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400138, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
+  m_PrefabInstance: {fileID: 145761603}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &1539598300 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400076, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
+  m_PrefabInstance: {fileID: 1856723930}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &1815629746 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 400088, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
