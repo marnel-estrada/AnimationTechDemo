@@ -401,6 +401,7 @@ MonoBehaviour:
     m_Bits: 64
   rayStartHeight: 2
   maxStepDown: 0.4
+  maxFootTilt: 30
 --- !u!1001 &145761603
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -431,7 +432,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 400080, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0
+      value: 0.7071068
       objectReference: {fileID: 0}
     - target: {fileID: 400080, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
       propertyPath: m_LocalRotation.x
@@ -439,7 +440,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 400080, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 1
+      value: 0.7071068
       objectReference: {fileID: 0}
     - target: {fileID: 400080, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
       propertyPath: m_LocalRotation.z
@@ -447,7 +448,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 400080, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 180
+      value: 90
       objectReference: {fileID: 0}
     - target: {fileID: 9500000, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
       propertyPath: m_Controller
@@ -502,6 +503,7 @@ MonoBehaviour:
     m_Bits: 64
   rayStartHeight: 2
   maxStepDown: 0.4
+  maxFootTilt: 30
 --- !u!1 &420666085
 GameObject:
   m_ObjectHideFlags: 0

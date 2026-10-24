@@ -28,6 +28,9 @@ namespace TechDemo {
         [SerializeField]
         private float maxStepDown = 0.4f;
 
+        [SerializeField]
+        private float maxFootTilt = 30.0f;
+
         private PlayableGraph playableGraph;
         private AnimationScriptPlayable ikPlayable;
 
@@ -49,7 +52,8 @@ namespace TechDemo {
             FootPelvisIkJob ikJob = new() {
                 pelvis = animator.BindStreamTransform(this.pelvis),
                 left = CreateLeg(animator, this.leftFoot),
-                right = CreateLeg(animator, this.rightFoot)
+                right = CreateLeg(animator, this.rightFoot),
+                maxFootTilt = this.maxFootTilt
             };
             
             // We call SetApplyFootIK(false) so that our custom IK works on the foot
@@ -93,6 +97,7 @@ namespace TechDemo {
 
             FootPelvisIkJob ikJob = this.ikPlayable.GetJobData<FootPelvisIkJob>();
             ikJob.rootHeight = rootHeight;
+            ikJob.maxFootTilt = this.maxFootTilt; // Might be changed in editor
             ApplyRay(ref ikJob.left, ref this.leftRay);
             ApplyRay(ref ikJob.right, ref this.rightRay);
             this.ikPlayable.SetJobData(ikJob);
@@ -171,6 +176,8 @@ namespace TechDemo {
             public Leg right;
 
             public float rootHeight;
+
+            public float maxFootTilt;
             
             public void ProcessRootMotion(AnimationStream stream) {
             }
@@ -207,7 +214,7 @@ namespace TechDemo {
                 return leg.groundHitY + ankleHeight / leg.groundHitNormal.y - footPosition.y;
             }
 
-            private static void Solve(AnimationStream stream, ref Leg leg, Vector3 footPosition, Quaternion footRotation, 
+            private void Solve(AnimationStream stream, ref Leg leg, Vector3 footPosition, Quaternion footRotation, 
                 float groundOffset) {
                 // Keep the clip's ankle height, but measured from the ground under the foot instead of the root.
                 // Always solve, even on a miss, since the pelvis may have moved the foot
@@ -215,7 +222,9 @@ namespace TechDemo {
                 TwoBoneIkSolver.Solve(stream, leg.top, leg.mid, leg.low, target);
                 
                 // The solver rotated the parents, so put back the animation world rotation, then tilt it to the ground
+                // Real ankles only bend so far, so limit the tilt. Matching steep slopes fully looks broken
                 Quaternion tilt = Quaternion.FromToRotation(Vector3.up, leg.groundHitNormal);
+                tilt = Quaternion.RotateTowards(Quaternion.identity, tilt, this.maxFootTilt);
                 leg.low.SetRotation(stream, Quaternion.Slerp(footRotation, tilt * footRotation, leg.weight));
             }
         }
