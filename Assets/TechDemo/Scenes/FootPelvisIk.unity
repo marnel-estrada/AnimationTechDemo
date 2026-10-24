@@ -226,7 +226,7 @@ Transform:
   m_GameObject: {fileID: 11972320}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.542, y: 0.05, z: 0.23}
+  m_LocalPosition: {x: -0.958, y: 0.05, z: 0.23}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -369,7 +369,7 @@ Transform:
   m_GameObject: {fileID: 116898238}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.564, y: -0.7, z: 0.23}
+  m_LocalPosition: {x: -2.064, y: -0.7, z: 0.23}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -422,7 +422,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 400080, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 2.44
+      value: 0.94
       objectReference: {fileID: 0}
     - target: {fileID: 400080, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
       propertyPath: m_LocalPosition.y
@@ -520,6 +520,7 @@ GameObject:
   - component: {fileID: 420666089}
   - component: {fileID: 420666088}
   - component: {fileID: 420666087}
+  - component: {fileID: 420666091}
   m_Layer: 6
   m_Name: GroundInclined
   m_TagString: Untagged
@@ -613,13 +614,28 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 420666085}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0.38268343, w: 0.92387956}
-  m_LocalPosition: {x: 2.797, y: -0.305, z: 0}
+  m_LocalRotation: {x: 0, y: 0, z: -0.12273552, w: 0.99243945}
+  m_LocalPosition: {x: 1.297, y: -0.305, z: 0}
   m_LocalScale: {x: 3.04, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 45}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: -14.1}
+--- !u!114 &420666091
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 420666085}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 551fef48974644d3b5e8ac34a9d4d65c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TechDemo.LerpZRotation
+  z1: 45
+  z2: -20
+  duration: 2
 --- !u!1 &614597312
 GameObject:
   m_ObjectHideFlags: 0
@@ -932,7 +948,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 400080, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0
+      value: -1.5
       objectReference: {fileID: 0}
     - target: {fileID: 400080, guid: e2d677099068e5f4aa25e17bef470f32, type: 3}
       propertyPath: m_LocalPosition.y
