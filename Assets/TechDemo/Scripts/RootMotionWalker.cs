@@ -69,8 +69,18 @@ namespace TechDemo {
             
             this.mixer.SetInputWeight(IDLE_INPUT_ID, 1.0f);
             
+            // Optional step between the mixer and the output, like FootPlacementPostProcess
+            IAnimationPostProcess postProcess = GetComponent<IAnimationPostProcess>();
+            Assert.IsNotNull(postProcess);
+            
+            // A post-process like FootPlacementPostProcess places the feet itself. Humanoid foot IK would undo that
+            idleClipPlayable.SetApplyFootIK(false);
+            walkClipPlayable.SetApplyFootIK(false);
+
+            Playable postProcessPlayable = postProcess.CreatePlayable(this.playableGraph, this.animator, this.mixer);
+            
             AnimationPlayableOutput output = AnimationPlayableOutput.Create(this.playableGraph, "output", this.animator);
-            output.SetSourcePlayable(this.mixer);
+            output.SetSourcePlayable(postProcessPlayable);
             this.playableGraph.Play();
         }
 
