@@ -8,13 +8,13 @@ namespace TechDemo {
     public class FootPlacementPostProcess : MonoBehaviour, IAnimationPostProcess {
         [SerializeField]
         private Transform leftFoot;
-        
+
         [SerializeField]
         private Transform leftToe;
-        
+
         [SerializeField]
         private Transform rightFoot;
-        
+
         [SerializeField]
         private Transform rightToe;
 
@@ -26,43 +26,51 @@ namespace TechDemo {
 
         [SerializeField]
         private float rayStartHeight = 0.5f;
-        
+
         // How far below the root a foot may reach. The pelvis drops by up to this much
         [SerializeField]
         private float maxStepDown = 0.4f;
 
         [SerializeField]
         private float maxFootTilt = 30.0f;
+        
+        // Radius of the sweep under each heel, so the heel rests on the highest ground under it instead of only
+        // the point under the ankle
+        private float heelRadius = 0.05f;
 
         private AnimationScriptPlayable ikPlayable;
 
-        // Last raycast, for gizmos
-        private FootRay leftRay;
-        private FootRay rightRay;
+        // For gizmos
+        private FootRay leftHeelRay;
+        private FootRay leftToeRay;
         
+        private FootRay rightHeelRay;
+        private FootRay rightToeRay;
+
         public Playable CreatePlayable(PlayableGraph graph, Animator animator, Playable input) {
             Assert.IsNotNull(this.leftFoot);
             Assert.IsNotNull(this.leftToe);
             Assert.IsNotNull(this.rightFoot);
             Assert.IsNotNull(this.rightToe);
             Assert.IsNotNull(this.pelvis);
-            
+            Assert.IsTrue(this.heelRadius > 0);
+
             FootPelvisIkJob ikJob = new() {
                 pelvis = animator.BindStreamTransform(this.pelvis),
                 left = CreateLeg(animator, this.leftFoot, this.leftToe),
                 right = CreateLeg(animator, this.rightFoot, this.rightToe),
                 maxFootTilt = this.maxFootTilt
             };
-            
+
             this.ikPlayable = AnimationScriptPlayable.Create(graph, ikJob);
             this.ikPlayable.AddInput(input, 0, 1f);
             return this.ikPlayable;
         }
-        
+
         private static Leg CreateLeg(Animator animator, Transform foot, Transform toe) {
             Transform knee = foot.parent;
             Assert.IsNotNull(knee);
-            
+
             Transform hip = knee.parent;
             Assert.IsNotNull(hip);
 
@@ -71,7 +79,7 @@ namespace TechDemo {
                 mid = animator.BindStreamTransform(knee),
                 low = animator.BindStreamTransform(foot),
                 toe = animator.BindStreamTransform(toe),
-                groundHitNormal = Vector3.up
+                toeGroundNormal = Vector3.up
             };
         }
 
@@ -81,68 +89,93 @@ namespace TechDemo {
             if (!this.ikPlayable.IsValid()) {
                 return;
             }
-            
+
             // Do the raycast here since Physics can't run in the animation job.
             // This uses the last frame's foot position, though
             float rootHeight = this.transform.position.y;
 
-            this.leftRay = CastFootRay(this.leftFoot, rootHeight);
-            this.rightRay = CastFootRay(this.rightFoot, rootHeight);
+            this.leftHeelRay = CastFootRay(this.leftFoot, rootHeight, this.heelRadius);
+            this.leftToeRay = CastFootRay(this.leftToe, rootHeight, 0f);
+            
+            this.rightHeelRay = CastFootRay(this.rightFoot, rootHeight, this.heelRadius);
+            this.rightToeRay = CastFootRay(this.rightToe, rootHeight, 0f);
 
             FootPelvisIkJob ikJob = this.ikPlayable.GetJobData<FootPelvisIkJob>();
             ikJob.rootHeight = rootHeight;
             ikJob.maxFootTilt = this.maxFootTilt; // Might be changed in editor
-            ApplyRay(ref ikJob.left, ref this.leftRay);
-            ApplyRay(ref ikJob.right, ref this.rightRay);
+            ApplyRay(ref ikJob.left, ref this.leftHeelRay, ref this.leftToeRay);
+            ApplyRay(ref ikJob.right, ref this.rightHeelRay, ref this.rightToeRay);
             this.ikPlayable.SetJobData(ikJob);
         }
-        
-        private FootRay CastFootRay(Transform foot, float rootHeight) {
+
+        private FootRay CastFootRay(Transform foot, float rootHeight, float radius) {
             Vector3 origin = foot.position;
             origin.y = rootHeight + this.rayStartHeight;
 
             FootRay ray = new() {
                 origin = origin,
-                rayLength = this.rayStartHeight + this.maxStepDown
+                rayLength = this.rayStartHeight + this.maxStepDown,
+                radius = radius
             };
 
-            ray.hasHit = Physics.Raycast(origin, Vector3.down, out ray.hit, ray.rayLength, this.groundMask);
+            if (radius > 0) {
+                // The sphere's bottom reaches radius further than its centre, so shorten the cast to keep the same reach
+                ray.hasHit = Physics.SphereCast(origin, radius, Vector3.down, out ray.hit, 
+                    ray.rayLength - radius, this.groundMask);
+            } else {
+                ray.hasHit = Physics.Raycast(origin, Vector3.down, out ray.hit, ray.rayLength, this.groundMask);
+            }
 
             return ray;
         }
 
-        private static void ApplyRay(ref Leg leg, ref FootRay ray) {
-            if (ray.hasHit) {
-                leg.groundHitPoint = ray.hit.point;
-                leg.groundHitNormal = ray.hit.normal;
-                leg.weight = 1.0f;
+        private static void ApplyRay(ref Leg leg, ref FootRay heelRay, ref FootRay toeRay) {
+            if (heelRay.hasHit) {
+                leg.heelGroundY = heelRay.GroundY;
+                leg.heelWeight = 1.0f;
             } else {
-                leg.weight = 0;
+                leg.heelWeight = 0;
+            }
+
+            if (toeRay.hasHit) {
+                leg.toeGroundY = toeRay.GroundY;
+                leg.toeGroundNormal = toeRay.hit.normal;
+                leg.toeWeight = 1.0f;
+            } else {
+                leg.toeWeight = 0;
             }
         }
-        
+
         private void OnDrawGizmos() {
             if (!Application.isPlaying) {
                 return;
             }
 
-            DrawFootRay(ref this.leftRay);
-            DrawFootRay(ref this.rightRay);
+            DrawFootRay(ref this.leftHeelRay);
+            DrawFootRay(ref this.leftToeRay);
+            
+            DrawFootRay(ref this.rightHeelRay);
+            DrawFootRay(ref this.rightToeRay);
         }
 
         private static void DrawFootRay(ref FootRay ray) {
             if (ray.hasHit) {
-                // Green up to the hit, then the hit point and its normal
+                // Green to where the cast stopped: the sphere for the heel, a small marker for the toe ray
                 Gizmos.color = Color.green;
-                Gizmos.DrawLine(ray.origin, ray.hit.point);
-                Gizmos.DrawWireSphere(ray.hit.point, 0.03f);
+                Vector3 end = ray.origin + Vector3.down * ray.hit.distance;
+                Gizmos.DrawLine(ray.origin, end);
+                Gizmos.DrawWireSphere(end, Mathf.Max(ray.radius, 0.02f));
 
                 Gizmos.color = Color.blue;
                 Gizmos.DrawLine(ray.hit.point, ray.hit.point + ray.hit.normal * 0.3f);
             } else {
                 // Red full length on a miss
                 Gizmos.color = Color.red;
-                Gizmos.DrawLine(ray.origin, ray.origin + Vector3.down * ray.rayLength);
+                Vector3 end = ray.origin + Vector3.down * (ray.rayLength - ray.radius);
+                Gizmos.DrawLine(ray.origin, end);
+                if (ray.radius > 0f) {
+                    Gizmos.DrawWireSphere(end, ray.radius);
+                }
             }
         }
 
@@ -150,7 +183,10 @@ namespace TechDemo {
             internal RaycastHit hit;
             internal Vector3 origin;
             internal float rayLength;
+            internal float radius;
             internal bool hasHit;
+
+            internal float GroundY => this.origin.y - this.hit.distance - radius;
         }
 
         private struct Leg {
@@ -159,12 +195,14 @@ namespace TechDemo {
             public TransformStreamHandle low;
             public TransformStreamHandle toe;
 
-            public Vector3 groundHitNormal;
-            public Vector3 groundHitPoint;
-                
-            public float weight;
+            public Vector3 toeGroundNormal;
+            public float heelGroundY;
+            public float toeGroundY;
+
+            public float heelWeight;    // 1 when the heel found ground. Without it the foot keeps its clip pose
+            public float toeWeight;     // 1 when the toe found ground. Without it the foot isn't tilted
         }
-        
+
         [BurstCompile]
         private struct FootPelvisIkJob : IAnimationJob {
             public TransformStreamHandle pelvis;
@@ -174,10 +212,10 @@ namespace TechDemo {
             public float rootHeight;
 
             public float maxFootTilt;
-            
+
             public void ProcessRootMotion(AnimationStream stream) {
             }
-            
+
             public void ProcessAnimation(AnimationStream stream) {
                 // Read the animated feet before moving the pelvis, since that moves them too
                 Vector3 leftFootPosition = this.left.low.GetPosition(stream);
@@ -186,56 +224,90 @@ namespace TechDemo {
                 Vector3 rightFootPosition = this.right.low.GetPosition(stream);
                 Quaternion rightFootRotation = this.right.low.GetRotation(stream);
 
-                (float leftOffset, Quaternion leftTargetRotation) = 
+                (float leftOffset, Quaternion leftTargetRotation) =
                     GroundOffset(stream, ref this.left, leftFootPosition, leftFootRotation);
-                (float rightOffset, Quaternion rightTargetRotation) = 
+                (float rightOffset, Quaternion rightTargetRotation) =
                     GroundOffset(stream, ref this.right, rightFootPosition, rightFootRotation);
-                
+
                 // Lower the pelvis by the deepest drop so that foot can reach. Raised feet just bend the knee
                 float pelvisOffset = Mathf.Min(0f, Mathf.Min(leftOffset, rightOffset));
                 Vector3 pelvisPosition = this.pelvis.GetPosition(stream);
                 this.pelvis.SetPosition(stream, pelvisPosition + new Vector3(0, pelvisOffset, 0));
-                
+
                 Solve(stream, ref this.left, leftFootPosition, leftTargetRotation, leftOffset);
                 Solve(stream, ref this.right, rightFootPosition, rightTargetRotation, rightOffset);
             }
-            
-            // How far the ankle has to move up (or down) to keep its clip height above the ground under it,
-            // measured along the ground normal so the sole doesn't sink on slopes. Zero on a miss so the foot
-            // keeps its animated height
-            private (float offset, Quaternion targetRotation) GroundOffset(AnimationStream stream, ref Leg leg, 
+
+            // How far the ankle has to move up (or down), and the foot's final rotation, to keep the clip's foot
+            // pose on the ground measured under the heel and the toe. Zero and the clip rotation on a heel miss
+            private (float offset, Quaternion targetRotation) GroundOffset(AnimationStream stream, ref Leg leg,
                 Vector3 footPosition, Quaternion footRotation) {
-                if (leg.weight <= 0f) {
+                if (leg.heelWeight <= 0f) {
                     return (0f, footRotation);
                 }
+
+                Vector3 toePosition = leg.toe.GetPosition(stream);
+                Vector3 toeFromAnkle = toePosition - footPosition;
+                
+                Quaternion tilt = leg.toeWeight > 0f 
+                    ? GroundTilt(ref leg, footPosition, toePosition) 
+                    : Quaternion.identity;
                 
                 // Real ankles only bend so far, so limit the tilt. Matching steep slopes fully looks broken
-                Quaternion tilt = Quaternion.FromToRotation(Vector3.up, leg.groundHitNormal);
                 tilt = Quaternion.RotateTowards(Quaternion.identity, tilt, this.maxFootTilt);
                 Quaternion targetRotation = tilt * footRotation;
-
-                float ankleHeight = footPosition.y - this.rootHeight;
-                float offset = leg.groundHitPoint.y + ankleHeight / leg.groundHitNormal.y - footPosition.y;
                 
-                // With the tilt clamped, the foot doesn't lie flat on steep slopes and the toes dig in.
-                // Lift the foot until the toe is back on the surface, like standing on the ball of the foot
-                Vector3 toeFromAnkle = tilt * (leg.toe.GetPosition(stream) - footPosition);
-                Vector3 toe = footPosition + new Vector3(0, offset, 0) + toeFromAnkle;
-                float toeDepth = Vector3.Dot(toe - leg.groundHitPoint, leg.groundHitNormal);
-                if (toeDepth < 0f) {
-                    offset -= toeDepth / leg.groundHitNormal.y;
+                // Keep the clip's ankle height above the heel's support, measured perpendicular to the tilted sole.
+                // Straight above the support that's ankleHeight / cos(tilt), and cos(tilt) is the sole's up.y
+                float ankleHeight = footPosition.y - this.rootHeight;
+                Vector3 soleUp = tilt * Vector3.up;
+                float offset = leg.heelGroundY + ankleHeight / soleUp.y - footPosition.y;
+                
+                // With the tilt clamped, the toe can end up below the ground measured under it. Lift the foot until
+                // the toe keeps its clip height there, like standing on the ball of the foot
+                if (leg.toeWeight > 0f) {
+                    float toeHeight = toePosition.y - this.rootHeight;
+                    float toeY = footPosition.y + offset + (tilt * toeFromAnkle).y;
+                    float toeLift = leg.toeGroundY + toeHeight - toeY;
+                    if (toeLift > 0f) {
+                        offset += toeLift;
+                    }
                 }
 
                 return (offset, targetRotation);
             }
 
-            private static void Solve(AnimationStream stream, ref Leg leg, Vector3 footPosition, 
+            // Tilt that lays the clip's flat foot onto the measured ground. Pitch comes from the line between the
+            // ground under the heel and under the toe, and roll from the side slope under the toe
+            private static Quaternion GroundTilt(ref Leg leg, Vector3 footPosition, Vector3 toePosition) {
+                Vector3 heelGround = new(footPosition.x, leg.heelGroundY, footPosition.z);
+                Vector3 toeGround = new(toePosition.x, leg.toeGroundY, toePosition.z);
+                Vector3 groundForward = toeGround - heelGround;
+                Vector3 flatForward = new(groundForward.x, 0, groundForward.z);
+
+                if (flatForward.sqrMagnitude < 0.000001f) {
+                    // Toe straight above the heel, like at toe-off. No direction to pitch along
+                    return Quaternion.identity;
+                }
+
+                Quaternion pitch = Quaternion.FromToRotation(flatForward, groundForward);
+                
+                // Roll around the pitched foot's forward axis so its up matches the side slope under the toe
+                Vector3 forward = groundForward.normalized;
+                Vector3 pitchedUp = Vector3.ProjectOnPlane(pitch * Vector3.up, forward);
+                Vector3 groundUp = Vector3.ProjectOnPlane(leg.toeGroundNormal, forward);
+                Quaternion roll = Quaternion.FromToRotation(pitchedUp, groundUp);
+
+                return roll * pitch;
+            }
+
+            private static void Solve(AnimationStream stream, ref Leg leg, Vector3 footPosition,
                 Quaternion targetRotation, float groundOffset) {
                 // Keep the clip's ankle height, but measured from the ground under the foot instead of the root.
                 // Always solve, even on a miss, since the pelvis may have moved the foot
                 Vector3 target = footPosition + new Vector3(0, groundOffset, 0);
                 TwoBoneIkSolver.Solve(stream, leg.top, leg.mid, leg.low, target);
-                
+
                 // The solver rotated the parents, so set the final world rotation computed in GroundOffset
                 leg.low.SetRotation(stream, targetRotation);
             }
