@@ -38,6 +38,10 @@ namespace TechDemo {
         // Radius of the sweep under each heel, so the heel rests on the highest ground under it instead of only
         // the point under the ankle
         private const float HEEL_RADIUS = 0.05f;
+        
+        // Radius of the sweep under each toe. Crossing an edge, the sphere rolls over the corner, so the toe's
+        // ground height eases down by up to this much instead of popping
+        private const float TOE_RADIUS = 0.04f;
 
         private AnimationScriptPlayable ikPlayable;
 
@@ -120,10 +124,10 @@ namespace TechDemo {
             float rootHeight = this.transform.position.y;
 
             this.leftHeelRay = CastFootRay(this.animatedPositions[LEFT_FOOT], rootHeight, HEEL_RADIUS);
-            this.leftToeRay = CastFootRay(this.animatedPositions[LEFT_TOE], rootHeight, 0f);
+            this.leftToeRay = CastFootRay(this.animatedPositions[LEFT_TOE], rootHeight, TOE_RADIUS);
 
             this.rightHeelRay = CastFootRay(this.animatedPositions[RIGHT_FOOT], rootHeight, HEEL_RADIUS);
-            this.rightToeRay = CastFootRay(this.animatedPositions[RIGHT_TOE], rootHeight, 0f);
+            this.rightToeRay = CastFootRay(this.animatedPositions[RIGHT_TOE], rootHeight, TOE_RADIUS);
 
             FootPelvisIkJob ikJob = this.ikPlayable.GetJobData<FootPelvisIkJob>();
             ikJob.rootHeight = rootHeight;
@@ -184,7 +188,7 @@ namespace TechDemo {
 
         private static void DrawFootRay(ref FootRay ray) {
             if (ray.hasHit) {
-                // Green to where the cast stopped: the sphere for the heel, a small marker for the toe ray
+                // Green to where the cast stopped, with the swept sphere
                 Gizmos.color = Color.green;
                 Vector3 end = ray.origin + Vector3.down * ray.hit.distance;
                 Gizmos.DrawLine(ray.origin, end);
