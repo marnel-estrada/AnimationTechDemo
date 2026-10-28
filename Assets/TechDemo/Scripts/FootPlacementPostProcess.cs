@@ -1,4 +1,5 @@
 ﻿using Unity.Burst;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Animations;
 using UnityEngine.Assertions;
@@ -33,19 +34,29 @@ namespace TechDemo {
 
         [SerializeField]
         private float maxFootTilt = 30.0f;
-        
+
         // Radius of the sweep under each heel, so the heel rests on the highest ground under it instead of only
         // the point under the ankle
-        private float heelRadius = 0.05f;
+        private const float HEEL_RADIUS = 0.05f;
 
         private AnimationScriptPlayable ikPlayable;
 
         // For gizmos
         private FootRay leftHeelRay;
         private FootRay leftToeRay;
-        
+
         private FootRay rightHeelRay;
         private FootRay rightToeRay;
+        
+        // Animated (pre-IK) ankle and toe positions written by the job, so the casts don't measure the IK's own
+        // result and feed back into it. We raycast from the pose, not from the resulting IK.
+        private NativeArray<Vector3> animatedPositions;
+        
+        // Indices into animatedPositions
+        private const int LEFT_FOOT = 0;
+        private const int LEFT_TOE = 1;
+        private const int RIGHT_FOOT = 2;
+        private const int RIGHT_TOE = 3;
 
         public Playable CreatePlayable(PlayableGraph graph, Animator animator, Playable input) {
             Assert.IsNotNull(this.leftFoot);
@@ -53,9 +64,17 @@ namespace TechDemo {
             Assert.IsNotNull(this.rightFoot);
             Assert.IsNotNull(this.rightToe);
             Assert.IsNotNull(this.pelvis);
-            Assert.IsTrue(this.heelRadius > 0);
 
+            this.animatedPositions = new NativeArray<Vector3>(4, Allocator.Persistent);
+            
+            // Start with the bind pose so the first casts, before the job has run, have valid origins
+            this.animatedPositions[LEFT_FOOT] = this.leftFoot.position;
+            this.animatedPositions[LEFT_TOE] = this.leftToe.position;
+            this.animatedPositions[RIGHT_FOOT] = this.rightFoot.position;
+            this.animatedPositions[RIGHT_TOE] = this.rightToe.position;
+            
             FootPelvisIkJob ikJob = new() {
+                animatedPositions = this.animatedPositions,
                 pelvis = animator.BindStreamTransform(this.pelvis),
                 left = CreateLeg(animator, this.leftFoot, this.leftToe),
                 right = CreateLeg(animator, this.rightFoot, this.rightToe),
@@ -83,6 +102,12 @@ namespace TechDemo {
             };
         }
 
+        private void OnDestroy() {
+            if (this.animatedPositions.IsCreated) {
+                this.animatedPositions.Dispose();
+            }
+        }
+
         private void Update() {
             // Nothing to drive until the graph owner has called CreatePlayable(). It also becomes invalid when the
             // owner destroys its graph
@@ -94,11 +119,11 @@ namespace TechDemo {
             // This uses the last frame's foot position, though
             float rootHeight = this.transform.position.y;
 
-            this.leftHeelRay = CastFootRay(this.leftFoot, rootHeight, this.heelRadius);
-            this.leftToeRay = CastFootRay(this.leftToe, rootHeight, 0f);
-            
-            this.rightHeelRay = CastFootRay(this.rightFoot, rootHeight, this.heelRadius);
-            this.rightToeRay = CastFootRay(this.rightToe, rootHeight, 0f);
+            this.leftHeelRay = CastFootRay(this.animatedPositions[LEFT_FOOT], rootHeight, HEEL_RADIUS);
+            this.leftToeRay = CastFootRay(this.animatedPositions[LEFT_TOE], rootHeight, 0f);
+
+            this.rightHeelRay = CastFootRay(this.animatedPositions[RIGHT_FOOT], rootHeight, HEEL_RADIUS);
+            this.rightToeRay = CastFootRay(this.animatedPositions[RIGHT_TOE], rootHeight, 0f);
 
             FootPelvisIkJob ikJob = this.ikPlayable.GetJobData<FootPelvisIkJob>();
             ikJob.rootHeight = rootHeight;
@@ -108,8 +133,7 @@ namespace TechDemo {
             this.ikPlayable.SetJobData(ikJob);
         }
 
-        private FootRay CastFootRay(Transform foot, float rootHeight, float radius) {
-            Vector3 origin = foot.position;
+        private FootRay CastFootRay(Vector3 origin, float rootHeight, float radius) {
             origin.y = rootHeight + this.rayStartHeight;
 
             FootRay ray = new() {
@@ -120,7 +144,7 @@ namespace TechDemo {
 
             if (radius > 0) {
                 // The sphere's bottom reaches radius further than its centre, so shorten the cast to keep the same reach
-                ray.hasHit = Physics.SphereCast(origin, radius, Vector3.down, out ray.hit, 
+                ray.hasHit = Physics.SphereCast(origin, radius, Vector3.down, out ray.hit,
                     ray.rayLength - radius, this.groundMask);
             } else {
                 ray.hasHit = Physics.Raycast(origin, Vector3.down, out ray.hit, ray.rayLength, this.groundMask);
@@ -153,7 +177,7 @@ namespace TechDemo {
 
             DrawFootRay(ref this.leftHeelRay);
             DrawFootRay(ref this.leftToeRay);
-            
+
             DrawFootRay(ref this.rightHeelRay);
             DrawFootRay(ref this.rightToeRay);
         }
@@ -205,6 +229,8 @@ namespace TechDemo {
 
         [BurstCompile]
         private struct FootPelvisIkJob : IAnimationJob {
+            public NativeArray<Vector3> animatedPositions;
+            
             public TransformStreamHandle pelvis;
             public Leg left;
             public Leg right;
@@ -223,6 +249,13 @@ namespace TechDemo {
 
                 Vector3 rightFootPosition = this.right.low.GetPosition(stream);
                 Quaternion rightFootRotation = this.right.low.GetRotation(stream);
+                
+                // Store the positions to animatedPositions
+                this.animatedPositions[LEFT_FOOT] = leftFootPosition;
+                this.animatedPositions[LEFT_TOE] = this.left.toe.GetPosition(stream);
+                
+                this.animatedPositions[RIGHT_FOOT] = rightFootPosition;
+                this.animatedPositions[RIGHT_TOE] = this.right.toe.GetPosition(stream);
 
                 (float leftOffset, Quaternion leftTargetRotation) =
                     GroundOffset(stream, ref this.left, leftFootPosition, leftFootRotation);
@@ -248,21 +281,21 @@ namespace TechDemo {
 
                 Vector3 toePosition = leg.toe.GetPosition(stream);
                 Vector3 toeFromAnkle = toePosition - footPosition;
-                
-                Quaternion tilt = leg.toeWeight > 0f 
-                    ? GroundTilt(ref leg, footPosition, toePosition) 
+
+                Quaternion tilt = leg.toeWeight > 0f
+                    ? GroundTilt(ref leg, footPosition, toePosition)
                     : Quaternion.identity;
-                
+
                 // Real ankles only bend so far, so limit the tilt. Matching steep slopes fully looks broken
                 tilt = Quaternion.RotateTowards(Quaternion.identity, tilt, this.maxFootTilt);
                 Quaternion targetRotation = tilt * footRotation;
-                
+
                 // Keep the clip's ankle height above the heel's support, measured perpendicular to the tilted sole.
                 // Straight above the support that's ankleHeight / cos(tilt), and cos(tilt) is the sole's up.y
                 float ankleHeight = footPosition.y - this.rootHeight;
                 Vector3 soleUp = tilt * Vector3.up;
                 float offset = leg.heelGroundY + ankleHeight / soleUp.y - footPosition.y;
-                
+
                 // With the tilt clamped, the toe can end up below the ground measured under it. Lift the foot until
                 // the toe keeps its clip height there, like standing on the ball of the foot
                 if (leg.toeWeight > 0f) {
@@ -291,7 +324,7 @@ namespace TechDemo {
                 }
 
                 Quaternion pitch = Quaternion.FromToRotation(flatForward, groundForward);
-                
+
                 // Roll around the pitched foot's forward axis so its up matches the side slope under the toe
                 Vector3 forward = groundForward.normalized;
                 Vector3 pitchedUp = Vector3.ProjectOnPlane(pitch * Vector3.up, forward);
