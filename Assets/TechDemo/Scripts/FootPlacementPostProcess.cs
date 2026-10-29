@@ -34,11 +34,26 @@ namespace TechDemo {
 
         [SerializeField]
         private float maxFootTilt = 30.0f;
+        
+        // How fast the IK eases toward its targets, roughly 1 / time constant (20 = about 50 ms). Feet rise faster
+        // than they drop, since a late rise sinks into a step while a late drop just hovers briefly
+        [SerializeField]
+        private float footUpSpeed = 20f;
+
+        [SerializeField]
+        private float footDownSpeed = 10f;
+
+        [SerializeField]
+        private float footTiltSpeed = 15f;
+        
+        // Slower than the feet so the body doesn't bob
+        [SerializeField]
+        private float pelvisSpeed = 8f;
 
         // Radius of the sweep under each heel, so the heel rests on the highest ground under it instead of only
         // the point under the ankle
         private const float HEEL_RADIUS = 0.05f;
-        
+
         // Radius of the sweep under each toe. Crossing an edge, the sphere rolls over the corner, so the toe's
         // ground height eases down by up to this much instead of popping
         private const float TOE_RADIUS = 0.04f;
@@ -51,11 +66,14 @@ namespace TechDemo {
 
         private FootRay rightHeelRay;
         private FootRay rightToeRay;
-        
+
         // Animated (pre-IK) ankle and toe positions written by the job, so the casts don't measure the IK's own
         // result and feed back into it. We raycast from the pose, not from the resulting IK.
         private NativeArray<Vector3> animatedPositions;
-        
+
+        // The IK result from the last frame, eased toward the new targets in the job
+        private NativeReference<SmoothedPose> smoothedPose;
+
         // Indices into animatedPositions
         private const int LEFT_FOOT = 0;
         private const int LEFT_TOE = 1;
@@ -69,20 +87,31 @@ namespace TechDemo {
             Assert.IsNotNull(this.rightToe);
             Assert.IsNotNull(this.pelvis);
 
-            this.animatedPositions = new NativeArray<Vector3>(4, Allocator.Persistent);
-            
+            this.animatedPositions = new NativeArray<Vector3>(4, Allocator.Domain);
+
             // Start with the bind pose so the first casts, before the job has run, have valid origins
             this.animatedPositions[LEFT_FOOT] = this.leftFoot.position;
             this.animatedPositions[LEFT_TOE] = this.leftToe.position;
             this.animatedPositions[RIGHT_FOOT] = this.rightFoot.position;
             this.animatedPositions[RIGHT_TOE] = this.rightToe.position;
-            
+
+            // Start with no correction. Quaternion's default is all zeroes, so the tilts need identity
+            this.smoothedPose = new NativeReference<SmoothedPose>(new SmoothedPose() {
+                leftTilt = Quaternion.identity,
+                rightTilt = Quaternion.identity
+            }, Allocator.Domain);
+
             FootPelvisIkJob ikJob = new() {
                 animatedPositions = this.animatedPositions,
+                smoothedPose = this.smoothedPose,
                 pelvis = animator.BindStreamTransform(this.pelvis),
                 left = CreateLeg(animator, this.leftFoot, this.leftToe),
                 right = CreateLeg(animator, this.rightFoot, this.rightToe),
-                maxFootTilt = this.maxFootTilt
+                maxFootTilt = this.maxFootTilt,
+                footUpSpeed = this.footUpSpeed,
+                footDownSpeed = this.footDownSpeed,
+                footTiltSpeed = this.footTiltSpeed,
+                pelvisSpeed = this.pelvisSpeed
             };
 
             this.ikPlayable = AnimationScriptPlayable.Create(graph, ikJob);
@@ -110,6 +139,10 @@ namespace TechDemo {
             if (this.animatedPositions.IsCreated) {
                 this.animatedPositions.Dispose();
             }
+
+            if (this.smoothedPose.IsCreated) {
+                this.smoothedPose.Dispose();
+            }
         }
 
         private void Update() {
@@ -132,6 +165,10 @@ namespace TechDemo {
             FootPelvisIkJob ikJob = this.ikPlayable.GetJobData<FootPelvisIkJob>();
             ikJob.rootHeight = rootHeight;
             ikJob.maxFootTilt = this.maxFootTilt; // Might be changed in editor
+            ikJob.footUpSpeed = this.footUpSpeed;
+            ikJob.footDownSpeed = this.footDownSpeed;
+            ikJob.footTiltSpeed = this.footTiltSpeed;
+            ikJob.pelvisSpeed = this.pelvisSpeed;
             ApplyRay(ref ikJob.left, ref this.leftHeelRay, ref this.leftToeRay);
             ApplyRay(ref ikJob.right, ref this.rightHeelRay, ref this.rightToeRay);
             this.ikPlayable.SetJobData(ikJob);
@@ -231,10 +268,21 @@ namespace TechDemo {
             public float toeWeight;     // 1 when the toe found ground. Without it the foot isn't tilted
         }
 
+        private struct SmoothedPose {
+            public float leftOffset;
+            public Quaternion leftTilt;
+
+            public float rightOffset;
+            public Quaternion rightTilt;
+
+            public float pelvisOffset;
+        }
+
         [BurstCompile]
         private struct FootPelvisIkJob : IAnimationJob {
             public NativeArray<Vector3> animatedPositions;
-            
+            public NativeReference<SmoothedPose> smoothedPose;
+
             public TransformStreamHandle pelvis;
             public Leg left;
             public Leg right;
@@ -242,6 +290,11 @@ namespace TechDemo {
             public float rootHeight;
 
             public float maxFootTilt;
+
+            public float footUpSpeed;
+            public float footDownSpeed;
+            public float footTiltSpeed;
+            public float pelvisSpeed;
 
             public void ProcessRootMotion(AnimationStream stream) {
             }
@@ -253,34 +306,63 @@ namespace TechDemo {
 
                 Vector3 rightFootPosition = this.right.low.GetPosition(stream);
                 Quaternion rightFootRotation = this.right.low.GetRotation(stream);
-                
+
                 // Store the positions to animatedPositions
                 this.animatedPositions[LEFT_FOOT] = leftFootPosition;
                 this.animatedPositions[LEFT_TOE] = this.left.toe.GetPosition(stream);
-                
+
                 this.animatedPositions[RIGHT_FOOT] = rightFootPosition;
                 this.animatedPositions[RIGHT_TOE] = this.right.toe.GetPosition(stream);
 
-                (float leftOffset, Quaternion leftTargetRotation) =
-                    GroundOffset(stream, ref this.left, leftFootPosition, leftFootRotation);
-                (float rightOffset, Quaternion rightTargetRotation) =
-                    GroundOffset(stream, ref this.right, rightFootPosition, rightFootRotation);
+                (float leftOffset, Quaternion leftTilt) =
+                    GroundOffset(stream, ref this.left, leftFootPosition);
+                (float rightOffset, Quaternion rightTilt) =
+                    GroundOffset(stream, ref this.right, rightFootPosition);
+                
+                // Ease the result instead of the casts, so that targets stay exact and only the pose lags
+                float deltaTime = stream.deltaTime;
+                SmoothedPose smoothed = this.smoothedPose.Value;
+                
+                // The pelvis target comes from the raw offsets, so the pelvis isn't held back by the feet's
+                // own easing
+                float pelvisTarget = Mathf.Min(0, Mathf.Min(leftOffset, rightOffset));
+                smoothed.pelvisOffset = Ease(smoothed.pelvisOffset, pelvisTarget, this.pelvisSpeed, deltaTime);
+
+                smoothed.leftOffset = EaseFootOffset(smoothed.leftOffset, leftOffset, deltaTime);
+                smoothed.rightOffset = EaseFootOffset(smoothed.rightOffset, rightOffset, deltaTime);
+
+                float tiltT = 1f - Mathf.Exp(-this.footTiltSpeed * deltaTime);
+                smoothed.leftTilt = Quaternion.Slerp(smoothed.leftTilt, leftTilt, tiltT);
+                smoothed.rightTilt = Quaternion.Slerp(smoothed.rightTilt, rightTilt, tiltT);
+
+                this.smoothedPose.Value = smoothed; // Modify the value
 
                 // Lower the pelvis by the deepest drop so that foot can reach. Raised feet just bend the knee
-                float pelvisOffset = Mathf.Min(0f, Mathf.Min(leftOffset, rightOffset));
                 Vector3 pelvisPosition = this.pelvis.GetPosition(stream);
-                this.pelvis.SetPosition(stream, pelvisPosition + new Vector3(0, pelvisOffset, 0));
+                this.pelvis.SetPosition(stream, pelvisPosition + new Vector3(0, smoothed.pelvisOffset, 0));
 
-                Solve(stream, ref this.left, leftFootPosition, leftTargetRotation, leftOffset);
-                Solve(stream, ref this.right, rightFootPosition, rightTargetRotation, rightOffset);
+                Solve(stream, ref this.left, leftFootPosition, 
+                    smoothed.leftTilt * leftFootRotation, smoothed.leftOffset);
+                Solve(stream, ref this.right, rightFootPosition, 
+                    smoothed.rightTilt * rightFootRotation, smoothed.rightOffset);
             }
 
-            // How far the ankle has to move up (or down), and the foot's final rotation, to keep the clip's foot
-            // pose on the ground measured under the heel and the toe. Zero and the clip rotation on a heel miss
-            private (float offset, Quaternion targetRotation) GroundOffset(AnimationStream stream, ref Leg leg,
-                Vector3 footPosition, Quaternion footRotation) {
+            private float EaseFootOffset(float current, float target, float deltaTime) {
+                float speed = target > current ? this.footUpSpeed : this.footDownSpeed;
+                return Ease(current, target, speed, deltaTime);
+            }
+
+            // Frame-rate independent exponential ease. speed is roughly 1 / time constant
+            private static float Ease(float current, float target, float speed, float deltaTime) {
+                return Mathf.Lerp(current, target, 1f - Mathf.Exp(-speed * deltaTime));
+            }
+
+            // How far the ankle has to move up (or down), and the tilt that lays the foot on the ground measured under
+            // the heel and the toe. No correction on a heel miss, so the smoothing eases the foot back to its clip pose
+            private (float offset, Quaternion tilt) GroundOffset(AnimationStream stream, ref Leg leg,
+                Vector3 footPosition) {
                 if (leg.heelWeight <= 0f) {
-                    return (0f, footRotation);
+                    return (0f, Quaternion.identity);
                 }
 
                 Vector3 toePosition = leg.toe.GetPosition(stream);
@@ -292,7 +374,6 @@ namespace TechDemo {
 
                 // Real ankles only bend so far, so limit the tilt. Matching steep slopes fully looks broken
                 tilt = Quaternion.RotateTowards(Quaternion.identity, tilt, this.maxFootTilt);
-                Quaternion targetRotation = tilt * footRotation;
 
                 // Keep the clip's ankle height above the heel's support, measured perpendicular to the tilted sole.
                 // Straight above the support that's ankleHeight / cos(tilt), and cos(tilt) is the sole's up.y
@@ -311,7 +392,7 @@ namespace TechDemo {
                     }
                 }
 
-                return (offset, targetRotation);
+                return (offset, tilt);
             }
 
             // Tilt that lays the clip's flat foot onto the measured ground. Pitch comes from the line between the
@@ -345,7 +426,8 @@ namespace TechDemo {
                 Vector3 target = footPosition + new Vector3(0, groundOffset, 0);
                 TwoBoneIkSolver.Solve(stream, leg.top, leg.mid, leg.low, target);
 
-                // The solver rotated the parents, so set the final world rotation computed in GroundOffset
+                // The solver rotated the parents, so set the final world rotation: the smoothed tilt on the clip's
+                // foot rotation
                 leg.low.SetRotation(stream, targetRotation);
             }
         }
