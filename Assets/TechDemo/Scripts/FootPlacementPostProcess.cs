@@ -352,7 +352,7 @@ namespace TechDemo {
                 return Ease(current, target, speed, deltaTime);
             }
 
-            // Frame-rate independent exponential ease. speed is roughly 1 / time constant
+            // Frame-rate independent exponential ease, speed is roughly 1 / time constant
             private static float Ease(float current, float target, float speed, float deltaTime) {
                 return Mathf.Lerp(current, target, 1f - Mathf.Exp(-speed * deltaTime));
             }
