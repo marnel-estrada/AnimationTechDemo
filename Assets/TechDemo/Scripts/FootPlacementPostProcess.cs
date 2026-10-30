@@ -82,6 +82,11 @@ namespace TechDemo {
 
         private int sphereCastHandle = -1;
 
+        // The agent might be spawned dynamically so provide this such that the SpherecastHandler could be set
+        public void Init(SpherecastHandler spherecastHandler) {
+            this.spherecastHandler = spherecastHandler;
+        }
+
         public Playable CreatePlayable(PlayableGraph graph, Animator animator, Playable input) {
             Assert.IsNotNull(this.spherecastHandler);
             Assert.IsNotNull(this.leftFoot);

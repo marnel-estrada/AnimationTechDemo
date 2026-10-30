@@ -64,7 +64,8 @@ namespace TechDemo {
         private Vector3 currentTargetPos;
         private Timer waitTimer;
 
-        private void OnEnable() {
+        // We don't use OnEnable() here so we can control when an agent needs to prepare
+        public void Prepare() {
             Assert.IsNotNull(this.idleClip);
             Assert.IsNotNull(this.walkClip);
 

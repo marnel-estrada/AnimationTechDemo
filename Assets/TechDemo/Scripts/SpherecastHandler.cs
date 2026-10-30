@@ -4,6 +4,7 @@ using Unity.Collections;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace TechDemo {
     /// <summary>
@@ -13,8 +14,9 @@ namespace TechDemo {
         [SerializeField]
         private int capacity = 1024;
         
+        [FormerlySerializedAs("groundMask")]
         [SerializeField]
-        private LayerMask groundMask = 0;
+        private LayerMask footMask;
 
         // We return a handle to the foot ray set of an agent whenever one wants to register
         private int handleCount;
@@ -65,7 +67,7 @@ namespace TechDemo {
             PrepareCommandsJob prepareCommandsJob = new() {
                 footRays = this.footRays,
                 commands = commands,
-                layerMask = this.groundMask.value
+                layerMask = this.footMask.value
             };
             JobHandle handle = prepareCommandsJob.ScheduleParallelByRef(commandCount, 64, default);
             
