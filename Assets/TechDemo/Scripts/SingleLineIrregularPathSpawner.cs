@@ -2,7 +2,7 @@
 using UnityEngine.Serialization;
 
 namespace TechDemo {
-    public class IrregularPathSpawner : MonoBehaviour {
+    public class SingleLineIrregularPathSpawner : MonoBehaviour {
         [SerializeField]
         private GameObject platformPrefab;
 
