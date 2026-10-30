@@ -262,8 +262,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TechDemo.AgentsSpawner
   agentPrefab: {fileID: 8207916852094795068, guid: aa32b4fd511508042b00df59b0a896ab, type: 3}
   spawnCount: 500
-  minPos: {x: -25, y: 0, z: -25}
-  maxPos: {x: 25, y: 0, z: 25}
+  minPos: {x: -24, y: 0, z: -24}
+  maxPos: {x: 24, y: 0, z: 24}
 --- !u!4 &19735988
 Transform:
   m_ObjectHideFlags: 0

@@ -8,6 +8,9 @@ using UnityEngine.Playables;
 namespace TechDemo {
     public class FootPlacementPostProcess : MonoBehaviour, IAnimationPostProcess {
         [SerializeField]
+        private SpherecastHandler spherecastHandler;
+        
+        [SerializeField]
         private Transform leftFoot;
 
         [SerializeField]
@@ -21,9 +24,6 @@ namespace TechDemo {
 
         [SerializeField]
         private Transform pelvis;
-
-        [SerializeField]
-        private LayerMask groundMask = 0;
 
         [SerializeField]
         private float rayStartHeight = 0.5f;
@@ -61,11 +61,11 @@ namespace TechDemo {
         private AnimationScriptPlayable ikPlayable;
 
         // For gizmos
-        private FootRay leftHeelRay;
-        private FootRay leftToeRay;
+        private FootRay leftHeelGizmoRay;
+        private FootRay leftToeGizmoRay;
 
-        private FootRay rightHeelRay;
-        private FootRay rightToeRay;
+        private FootRay rightHeelGizmoRay;
+        private FootRay rightToeGizmoRay;
 
         // Animated (pre-IK) ankle and toe positions written by the job, so the casts don't measure the IK's own
         // result and feed back into it. We raycast from the pose, not from the resulting IK.
@@ -80,12 +80,19 @@ namespace TechDemo {
         private const int RIGHT_FOOT = 2;
         private const int RIGHT_TOE = 3;
 
+        private int sphereCastHandle = -1;
+
         public Playable CreatePlayable(PlayableGraph graph, Animator animator, Playable input) {
+            Assert.IsNotNull(this.spherecastHandler);
             Assert.IsNotNull(this.leftFoot);
             Assert.IsNotNull(this.leftToe);
             Assert.IsNotNull(this.rightFoot);
             Assert.IsNotNull(this.rightToe);
             Assert.IsNotNull(this.pelvis);
+
+            // Register so we know the handle to update
+            this.sphereCastHandle = this.spherecastHandler.Register(this);
+            Assert.IsTrue(this.sphereCastHandle >= 0); // Must be a valid index
 
             this.animatedPositions = new NativeArray<Vector3>(4, Allocator.Domain);
 
@@ -156,25 +163,18 @@ namespace TechDemo {
             // This uses the last frame's foot position, though
             float rootHeight = this.transform.position.y;
 
-            this.leftHeelRay = CastFootRay(this.animatedPositions[LEFT_FOOT], rootHeight, HEEL_RADIUS);
-            this.leftToeRay = CastFootRay(this.animatedPositions[LEFT_TOE], rootHeight, TOE_RADIUS);
-
-            this.rightHeelRay = CastFootRay(this.animatedPositions[RIGHT_FOOT], rootHeight, HEEL_RADIUS);
-            this.rightToeRay = CastFootRay(this.animatedPositions[RIGHT_TOE], rootHeight, TOE_RADIUS);
-
-            FootPelvisIkJob ikJob = this.ikPlayable.GetJobData<FootPelvisIkJob>();
-            ikJob.rootHeight = rootHeight;
-            ikJob.maxFootTilt = this.maxFootTilt; // Might be changed in editor
-            ikJob.footUpSpeed = this.footUpSpeed;
-            ikJob.footDownSpeed = this.footDownSpeed;
-            ikJob.footTiltSpeed = this.footTiltSpeed;
-            ikJob.pelvisSpeed = this.pelvisSpeed;
-            ApplyRay(ref ikJob.left, ref this.leftHeelRay, ref this.leftToeRay);
-            ApplyRay(ref ikJob.right, ref this.rightHeelRay, ref this.rightToeRay);
-            this.ikPlayable.SetJobData(ikJob);
+            FootRay leftHeelRay = PrepareRay(this.animatedPositions[LEFT_FOOT], rootHeight, HEEL_RADIUS);
+            FootRay leftToeRay = PrepareRay(this.animatedPositions[LEFT_TOE], rootHeight, TOE_RADIUS);
+            FootRay rightHeelRay = PrepareRay(this.animatedPositions[RIGHT_FOOT], rootHeight, HEEL_RADIUS);
+            FootRay rightToeRay = PrepareRay(this.animatedPositions[RIGHT_TOE], rootHeight, TOE_RADIUS);
+            
+            // Update the sphere cast handler
+            this.spherecastHandler.UpdateRays(this.sphereCastHandle, ref leftHeelRay, ref leftToeRay, 
+                ref rightHeelRay, ref rightToeRay);
         }
 
-        private FootRay CastFootRay(Vector3 origin, float rootHeight, float radius) {
+        private FootRay PrepareRay(Vector3 origin, float rootHeight, float radius) {
+            Assert.IsTrue(radius > 0f);
             origin.y = rootHeight + this.rayStartHeight;
 
             FootRay ray = new() {
@@ -183,15 +183,27 @@ namespace TechDemo {
                 radius = radius
             };
 
-            if (radius > 0) {
-                // The sphere's bottom reaches radius further than its centre, so shorten the cast to keep the same reach
-                ray.hasHit = Physics.SphereCast(origin, radius, Vector3.down, out ray.hit,
-                    ray.rayLength - radius, this.groundMask);
-            } else {
-                ray.hasHit = Physics.Raycast(origin, Vector3.down, out ray.hit, ray.rayLength, this.groundMask);
-            }
-
             return ray;
+        }
+
+        public void ProcessCastResult(ref FootRay leftHeel, ref FootRay leftToe, ref FootRay rightHeel,
+            ref FootRay rightToe) {
+            // Update gizmo copies so we could render gizmos
+            this.leftHeelGizmoRay = leftHeel;
+            this.leftToeGizmoRay = leftToe;
+            this.rightHeelGizmoRay = rightHeel;
+            this.rightToeGizmoRay = rightToe;
+            
+            FootPelvisIkJob ikJob = this.ikPlayable.GetJobData<FootPelvisIkJob>();
+            ikJob.rootHeight = this.transform.position.y;
+            ikJob.maxFootTilt = this.maxFootTilt; // Might be changed in editor
+            ikJob.footUpSpeed = this.footUpSpeed;
+            ikJob.footDownSpeed = this.footDownSpeed;
+            ikJob.footTiltSpeed = this.footTiltSpeed;
+            ikJob.pelvisSpeed = this.pelvisSpeed;
+            ApplyRay(ref ikJob.left, ref leftHeel, ref leftToe);
+            ApplyRay(ref ikJob.right, ref rightHeel, ref rightToe);
+            this.ikPlayable.SetJobData(ikJob);
         }
 
         private static void ApplyRay(ref Leg leg, ref FootRay heelRay, ref FootRay toeRay) {
@@ -204,7 +216,7 @@ namespace TechDemo {
 
             if (toeRay.hasHit) {
                 leg.toeGroundY = toeRay.GroundY;
-                leg.toeGroundNormal = toeRay.hit.normal;
+                leg.toeGroundNormal = toeRay.hitNormal;
                 leg.toeWeight = 1.0f;
             } else {
                 leg.toeWeight = 0;
@@ -215,24 +227,24 @@ namespace TechDemo {
             if (!Application.isPlaying) {
                 return;
             }
-
-            DrawFootRay(ref this.leftHeelRay);
-            DrawFootRay(ref this.leftToeRay);
-
-            DrawFootRay(ref this.rightHeelRay);
-            DrawFootRay(ref this.rightToeRay);
+        
+            DrawFootRay(ref this.leftHeelGizmoRay);
+            DrawFootRay(ref this.leftToeGizmoRay);
+        
+            DrawFootRay(ref this.rightHeelGizmoRay);
+            DrawFootRay(ref this.rightToeGizmoRay);
         }
-
+        
         private static void DrawFootRay(ref FootRay ray) {
             if (ray.hasHit) {
                 // Green to where the cast stopped, with the swept sphere
                 Gizmos.color = Color.green;
-                Vector3 end = ray.origin + Vector3.down * ray.hit.distance;
+                Vector3 end = ray.origin + Vector3.down * ray.hitDistance;
                 Gizmos.DrawLine(ray.origin, end);
                 Gizmos.DrawWireSphere(end, Mathf.Max(ray.radius, 0.02f));
-
+        
                 Gizmos.color = Color.blue;
-                Gizmos.DrawLine(ray.hit.point, ray.hit.point + ray.hit.normal * 0.3f);
+                Gizmos.DrawLine(ray.hitPoint, ray.hitPoint + ray.hitNormal * 0.3f);
             } else {
                 // Red full length on a miss
                 Gizmos.color = Color.red;
@@ -242,16 +254,6 @@ namespace TechDemo {
                     Gizmos.DrawWireSphere(end, ray.radius);
                 }
             }
-        }
-
-        private struct FootRay {
-            internal RaycastHit hit;
-            internal Vector3 origin;
-            internal float rayLength;
-            internal float radius;
-            internal bool hasHit;
-
-            internal float GroundY => this.origin.y - this.hit.distance - radius;
         }
 
         private struct Leg {
