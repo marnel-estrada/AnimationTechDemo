@@ -263,7 +263,7 @@ MonoBehaviour:
   spherecastHandler: {fileID: 661128072}
   animatorsMoveHandler: {fileID: 661128074}
   agentPrefab: {fileID: 8207916852094795068, guid: aa32b4fd511508042b00df59b0a896ab, type: 3}
-  spawnCount: 500
+  spawnCount: 1000
   minPos: {x: -24, y: 0, z: -24}
   maxPos: {x: 24, y: 0, z: 24}
 --- !u!4 &19735988

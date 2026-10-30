@@ -30,10 +30,11 @@ namespace TechDemo {
         private void Awake() {
             this.footRays =
                 new NativeArray<FootRay>(this.capacity * SPHERECAST_COUNT_PER_FOOT_PLACEMENT, Allocator.Domain);
-            this.footPlacements = new FootPlacementPostProcess[this.capacity];
         }
 
         public int Register(FootPlacementPostProcess footPlacement) {
+            this.footPlacements ??= new FootPlacementPostProcess[this.capacity];
+            
             if (this.handleCount >= this.capacity) {
                 throw new Exception($"Reached capacity: {this.capacity}");
             }
