@@ -59,17 +59,18 @@ namespace TechDemo {
         private AnimationMixerPlayable mixer;
 
         private float walkWeight;
-        private float groundVelocity;
 
         private Vector3 currentTargetPos;
         private Timer waitTimer;
 
         // We don't use OnEnable() here so we can control when an agent needs to prepare
-        public void Prepare() {
+        public void Prepare(AnimatorsMoveRaycastHandler animatorsMoveHandler) {
             Assert.IsNotNull(this.idleClip);
             Assert.IsNotNull(this.walkClip);
-
+            
             this.animator = GetComponent<Animator>();
+            animatorsMoveHandler.Register(this.animator, this.groundRayHeight, 
+                this.groundRayLength, this.groundSmoothTime);
 
             // Unity only computes root motion when this is set. OnAnimatorMove() decides how it's applied.
             this.animator.applyRootMotion = true;
@@ -150,24 +151,9 @@ namespace TechDemo {
 
             this.waitTimer = new Timer(Random.Range(this.minDuration, this.maxDuration));
         }
-
-        // Called after the Animator computes root motion. The walk clip's root motion is flat, so take its XZ
-        // movement and follow the ground for the height. Its rotation is baked into the pose, so steering stays ours
+        
+        // Stops Unity applying root motion itself. AnimatorsMoveRaycastHandler applies the delta in its LateUpdate()
         private void OnAnimatorMove() {
-            Vector3 position = this.transform.position + this.animator.deltaPosition;
-            position.y = FollowGround(position);
-            this.transform.position = position;
-        }
-
-        private float FollowGround(Vector3 position) {
-            Vector3 origin = position + new Vector3(0, this.groundRayHeight, 0);
-            if (!Physics.Raycast(origin, Vector3.down, out RaycastHit hit, this.groundRayLength, this.groundMask)) {
-                // No ground found
-                return position.y;
-            }
-
-            // Smooth so that the root doesn't snap up and down on stairs
-            return Mathf.SmoothDamp(position.y, hit.point.y, ref this.groundVelocity, this.groundSmoothTime);
         }
 
         private void OnDrawGizmosSelected() {

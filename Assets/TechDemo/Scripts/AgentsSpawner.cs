@@ -5,6 +5,9 @@ namespace TechDemo {
     public class AgentsSpawner : MonoBehaviour {
         [SerializeField]
         private SpherecastHandler spherecastHandler;
+
+        [SerializeField]
+        private AnimatorsMoveRaycastHandler animatorsMoveHandler;
         
         [SerializeField]
         private GameObject agentPrefab;
@@ -18,8 +21,9 @@ namespace TechDemo {
         [SerializeField]
         private Vector3 maxPos = new(25f, 0, 25f);
 
-        private void Awake() {
+        private void Start() {
             Assert.IsNotNull(this.spherecastHandler);
+            Assert.IsNotNull(this.animatorsMoveHandler);
             Assert.IsNotNull(this.agentPrefab);
             
             for (int i = 0; i < this.spawnCount; i++) {
@@ -38,7 +42,7 @@ namespace TechDemo {
 
                 AgentWalker walker = go.GetComponent<AgentWalker>();
                 Assert.IsNotNull(walker);
-                walker.Prepare();
+                walker.Prepare(this.animatorsMoveHandler);
             }
         }
     }
